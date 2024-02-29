@@ -11,10 +11,6 @@ Xs=G*S;
 %apply source loclization algorithms to this time point in the following
 [~,id]=max(mean(S,1));
 
-%visualize original source distribution
-% figure; trisurf(mesh.f,mesh.v(:,1),mesh.v(:,2),mesh.v(:,3),S(:,id));
-% title('original source configuration: two source regions','FontSize',18); axis off;
-
 %generate Gaussian random noise
 Noise=randn(size(Xs));
 
@@ -26,11 +22,6 @@ SNR=1;
 
 %generate noisy data according to given SNR
 X=Xs+1/sqrt(SNR)*Noise;
-
-%visualize data (for a reduced number of sensors whose indices are
-%specified by idx_electrodes)
-% plot_eeg(X(idx_electrodes,:),max(max(X(idx_electrodes,:))),256,channel_names);
-% title('noisy EEG data','FontSize',18);
 
 %% Lambda variation
 lambda    = logspace(-1,3,5);
@@ -61,34 +52,34 @@ X      = Xs+1/sqrt(SNR)*Noise;
 lambda = logspace(-10,10,200);
 for i=1:length(lambda)
     Shat        = MNE(X(:,id),G,lambda(i));
-    err_reco(i) = norm(X(:,id) - G*Shat, 'fro');
-    norm_s(i)   = norm(Shat, 'fro');
+    err_reco(i) = norm(X(:,id) - G*Shat, 2);
+    norm_s(i)   = norm(Shat, 2);
 end
 
 figure; loglog(norm_s, err_reco);
 title("MNE: L-curve");
-ylabel("||X-As||");
-xlabel("||s||");
+ylabel("||X-As||_2");
+xlabel("||s||_2");
 grid();
 set(gca,'fontsize', 24);
 
-[~, idx_err_reco] = min(abs(err_reco - 2.34));
-[~, idx_norm_s]   = min(abs(norm_s - 283.3));
-fprintf("lambda(||X-As||) = %d\n", lambda(idx_err_reco))
-fprintf("lambda(||s||) = %d\n", lambda(idx_norm_s))
+[~, idx_err_reco] = min(abs(err_reco - 35.3));
+[~, idx_norm_s]   = min(abs(norm_s - 479.6));
+fprintf("lambda(||X-As||_2) = %d\n", lambda(idx_err_reco));
+fprintf("lambda(||s||_2) = %d\n", lambda(idx_norm_s));
 %% discrepancy principle
 SNR    = 1;
 X      = Xs+1/sqrt(SNR)*Noise;
 lambda = logspace(-10,10,200);
 for i=1:length(lambda)
     Shat        = MNE(X(:,id),G,lambda(i));
-    err_reco(i) = norm(X(:,id) - G*Shat, 'fro');
+    err_reco_2(i) = norm(X(:,id) - G*Shat, 2).^2;
 end
-norm_n = ones(size(err_reco))*norm(Noise, 'fro');
+norm_n_2 = ones(size(err_reco_2))*norm(1/sqrt(SNR)*Noise, 2).^2;
 
 figure; 
-loglog(lambda, err_reco.^2.75, 'DisplayName','||X-As||^2'); hold on;
-loglog(lambda, norm_n.^2, 'DisplayName','||Noise||^2'); 
+loglog(lambda, err_reco_2, 'DisplayName','||X-As||_2^2'); hold on;
+loglog(lambda, norm_n_2, 'DisplayName','||Noise||_2^2'); 
 title("MNE: Discrepancy");
 ylabel("Power");
 xlabel("lambda");
@@ -96,14 +87,41 @@ grid();
 legend;
 set(gca,'fontsize', 24);
 
-fprintf("lambda= %d\n", 11758.5)
+fprintf("lambda= %d\n", 1168.5);
 %% Generalized Cross-Validation
 %  code to be added in the L-curve iteration
+N      = size(G, 1);
+SNR    = 1;
+X      = Xs+1/sqrt(SNR)*Noise;
+lambda = logspace(-10,10,200);
+for i=1:length(lambda)
+    Shat       = MNE(X(:,id),G,lambda(i));
+    err_reco_2 = norm(X(:,id) - G*Shat, 2).^2;
+    trace_2    = trace(eye(N) - G*G'*inv(G*G' + lambda(i)*eye(N))).^2;
+    GCV(i)     = err_reco_2 / trace_2;
+end
 
+figure; loglog(lambda, GCV);
+title("MNE: Generalized cross-validation");
+ylabel("GCV");
+xlabel("lambda");
+grid();
+set(gca,'fontsize', 24);
+
+[~, idx_GCV] = min(GCV);
+fprintf("lambda(GCV) = %d\n", lambda(idx_GCV));
 
 %% SISSY
-T=variation_operator(mesh,'face');
-lambda=logspace(-2,3,6); % lambda from 0.01 to 1000
+SNR    = 10;
+X      = Xs+1/sqrt(SNR)*Noise;
+T      = variation_operator(mesh,'face');
+alpha = 0.1;
+Niter = 60;
+lambda = logspace(-2,3,6);
+fig_count = 1;
 for k=1:length(lambda)
-[SI,lam]=SISSY(X(:,id),G,T,lambda(k),0.1, MaxIter);  %  function to be implemented
+    fprintf("Figure=%d, Lambda=%d\n", fig_count, lambda(k))
+    Shat=SISSY(X(:,id),G,T,lambda(k), alpha, Niter);  %  function to be implemented
+    figure; trisurf(mesh.f,mesh.v(:,1),mesh.v(:,2),mesh.v(:,3),Shat); axis off;
+	fig_count = fig_count + 1;
 end
